@@ -19,12 +19,14 @@ public class RSA4096 implements IAsymCipher
 	private BigInteger nd;
 	private byte[] pubKey; // {e, n}
 	private byte[] privKey; //{d, n}
-	//private BigInteger buffI;
 
 	public static void main(String[] args)
 	{
 		RSA4096 rsaBob, rsaAlice;
-		byte[] buff;
+		RSA4096 rsaBuff;
+		byte[] buff, buff2, buff3;
+		byte[] buffKey;
+		byte[] pubKeyBuff, privKeyBuff;
 		String srcMsg;
 		String getMsg;
 		Random r = new Random();
@@ -37,6 +39,12 @@ public class RSA4096 implements IAsymCipher
 			buff = rsaAlice.getPubKey();
 			rsaAlice.setKeys(rsaBob.getPubKey(), rsaAlice.getPrivKey());
 			rsaBob.setKeys(buff, rsaBob.getPrivKey());
+
+			rsaBuff = new RSA4096();
+			rsaBuff.genKeys();
+			pubKeyBuff = rsaBuff.getPubKey();
+			privKeyBuff = rsaBuff.getPrivKey();
+
 			for(int i = 0; i < 100; ++i)
 			{
 				srcMsg = Tools.genRndString(r.nextInt(3048));
@@ -93,6 +101,42 @@ public class RSA4096 implements IAsymCipher
 					if(srcMsg.equals(getMsg) == false)
 						throw new IllegalStateException("error");
 				}
+
+				//Просто зашифровать и расшифровать с помощью static методов
+				for(int j = 0; j < 10; ++j)
+				{
+					buff = RSA4096.encrypt(srcMsg.getBytes(), pubKeyBuff);
+
+					buff = RSA4096.decrypt(buff, privKeyBuff);
+
+					getMsg = new String(buff);
+
+					if(srcMsg.equals(getMsg) == false)
+						throw new IllegalStateException("error");
+				}
+
+				//Тестирование слепой подписи
+				for(int j = 0; j < 10; ++j)
+				{
+					buff2 = srcMsg.getBytes();
+
+					buff3 = RSA4096.genClosingMultiplier(pubKeyBuff);
+
+					buff = RSA4096.blind(buff2, buff3, pubKeyBuff);
+
+					buff = RSA4096.blindSign(buff, privKeyBuff);
+
+					buff = RSA4096.unblind(buff2, buff, buff3, pubKeyBuff);
+
+					buff = RSA4096.unsign(buff, pubKeyBuff);
+
+					getMsg = new String(buff);
+
+					if(srcMsg.equals(getMsg) == false)
+						throw new IllegalStateException("error");
+				}
+
+				System.out.print(gi + "."+ i + " ");
 			}
 		}
 		System.out.println("All is OK");
@@ -124,7 +168,6 @@ public class RSA4096 implements IAsymCipher
 		this.d = _d;
 		this.ne = _n;
 		this.nd = _n;
-		//this.buffI = phi;//delete
 
 		byte[][] buffB = new byte[2][];
 		buffB[0] = _e.toByteArray();
@@ -159,50 +202,28 @@ public class RSA4096 implements IAsymCipher
 	 */
 	public void setKeys(byte[] pub, byte[] priv)
 	{
-		byte[][] pu = ByteWorker.Array2Arrays(pub);
-		byte[][] pr = ByteWorker.Array2Arrays(priv);
-		this.ne = new BigInteger(pu[1]);
-		this.nd = new BigInteger(pr[1]);
-		this.e = new BigInteger(pu[0]);
-		this.d = new BigInteger(pr[0]);
+		if(pub != null)
+		{
+			byte[][] pu = ByteWorker.Array2Arrays(pub);
+			this.e = new BigInteger(pu[0]);
+			this.ne = new BigInteger(pu[1]);
+		}
+		if(priv != null)
+		{
+			byte[][] pr = ByteWorker.Array2Arrays(priv);
+			this.nd = new BigInteger(pr[1]);
+			this.d = new BigInteger(pr[0]);
+		}
 	}
 
 	public byte[] encrypt(byte[] rawMsg)
 	{
-		if (rawMsg.length == 0)
-			throw new IllegalArgumentException("rawMsg.length = 0");
-		int pieces = rawMsg.length/RSA4096.maxBytes + 1;
-		if(rawMsg.length % RSA4096.maxBytes == 0)
-			--pieces;
-		byte[][] a  = new byte[pieces][];
-		int gi, ai, i;
-		gi = 0;
-		a[0] = new byte[(rawMsg.length-gi) < maxBytes?rawMsg.length-gi:maxBytes];
-		for(i = 0, gi = 0, ai = 0; gi < rawMsg.length; ++gi, ++i)
-		{
-			if(i >= RSA4096.maxBytes)
-			{
-				++ai;
-				i = 0;
-				a[ai] = new byte[(rawMsg.length-gi) < maxBytes?rawMsg.length-gi:maxBytes];
-			}
-			a[ai][i] = rawMsg[gi];
-		}
+		byte[][] a = ByteWorker.cutArray(rawMsg, RSA4096.maxBytes);
 
-		for(i = 0; i < a.length; ++i)
+		for(int i = 0; i < a.length; ++i)
 			a[i] = encrypt1(a[i]);
 
 		return ByteWorker.Arrays2Array(a);
-
-
-
-
-		/*if(Arrays.equals(rawMsg, res) == false || ai != a.length-1)
-			throw new IllegalStateException("=(");
-		if(Arrays.equals(rawMsg, res) == true)
-			throw new IllegalStateException("All is ok");
-
-		return null;*/
 	}
 
 	public byte[] decrypt(byte[] enMsg)
@@ -212,21 +233,7 @@ public class RSA4096 implements IAsymCipher
 		for(i = 0; i < a.length; ++i)
 			a[i] = decrypt1(a[i]);
 
-		n = 0;
-		for(i = 0; i < a.length; ++i)
-			n += a[i].length;
-		byte[] res = new byte[n];
-		gi = 0;
-		for(gi = 0, ai = 0, i = 0; gi < n; ++gi, ++i)
-		{
-			if(i >= a[ai].length)
-			{
-				++ai;
-				i = 0;
-			}
-			res[gi] = a[ai][i];
-		}
-		return res;
+		return ByteWorker.glueCutedArray(a);
 	}
 
 	private byte[] encrypt1(byte[] rawMsg)
@@ -245,6 +252,125 @@ public class RSA4096 implements IAsymCipher
 		BigInteger m = new BigInteger(enMsg);
 		BigInteger res = m.modPow(d, nd);
 		return ByteWorker.NumToBytes(res);
+	}
+
+	/**
+	 * Генерирует "закрывающий множитель" closingMultiplier
+	 *
+	 * Порядок использования функций: genClosingMultiplier, blind, blindSign, unblind. Дальше уже unsign
+	 * 
+	 * @param pubKey - публичный ключ того, кто будет вслепую подписывать. Для этого ключа и генерируется closingMultiplier
+	 * @return закрывающий множитель closingMultiplier
+	 */
+	public static byte[] genClosingMultiplier(byte[] pubKey)
+	{
+		byte[][] pu = ByteWorker.Array2Arrays(pubKey);
+		BigInteger n = new BigInteger(pu[1]);
+		BigInteger r;
+		Random rand = new Random();
+
+		do
+		{
+			r = Tools.rndBigInteger(new BigInteger(_4096/4, rand), n.subtract(BigInteger.ONE));
+		}while(Tools.extendedGCD(r, n)[0].equals(BigInteger.ONE) == false);
+
+		return r.toByteArray();
+	}
+
+	/**
+	 * Скрывает сообщение msg с помощью закрывающего множителя closingMultiplier от того, кто будет подписывать
+	 * 
+	 * Порядок использования функций: genClosingMultiplier, blind, blindSign, unblind. Дальше уже unsign
+	 *
+	 * @param msg - Сообщение, которое будет подписываться вслепую
+	 * @param closingMultiplier -  закрывающий множитель
+	 * @param pubKey - публичный ключ того, кто будет вслепую подписывать
+	 * @return скрытое сообщение msg_blind, для слепой подписи
+	 */
+	public static byte[] blind(byte[] msg, byte[] closingMultiplier, byte[] pubKey)
+	{
+		//https://ru.wikipedia.org/wiki/%D0%A1%D0%BB%D0%B5%D0%BF%D0%B0%D1%8F_%D0%BF%D0%BE%D0%B4%D0%BF%D0%B8%D1%81%D1%8C#%D0%9F%D1%80%D0%BE%D1%82%D0%BE%D0%BA%D0%BE%D0%BB_RSA
+		byte[] hashMsg = Tools.SHA256(msg);
+		BigInteger h = ByteWorker.BytesToNum(hashMsg);
+
+		BigInteger r = new BigInteger(closingMultiplier);
+
+		byte[][] buffB = ByteWorker.Array2Arrays(pubKey);
+		BigInteger n = new BigInteger(buffB[1]);
+		BigInteger e = new BigInteger(buffB[0]);
+
+		BigInteger _m = h.multiply(r.modPow(e, n)).mod(n);
+		return _m.toByteArray();
+	}
+
+	/**
+	 * Слепая подпись. Подписывающий не узнает, что подписывает
+	 *
+	 * Порядок использования функций: genClosingMultiplier, blind, blindSign, unblind. Дальше уже unsign
+	 * 
+	 * @param msg_blind - скрытое сообщение, полученное из функции blind
+	 * @param privKey - приватный ключ того, кто подписывает
+	 * @return подписанное скрытое сообщение signedBlindMsg, теперь нужно снять закрывающий множитель, для этого используйте функцию unblind 
+	 */
+	public static byte[] blindSign(byte[] msg_blind, byte[] privKey)
+	{
+		BigInteger _m = new BigInteger(msg_blind);
+
+		byte[][] buffB = ByteWorker.Array2Arrays(privKey);
+		BigInteger n = new BigInteger(buffB[1]);
+		BigInteger d = new BigInteger(buffB[0]);
+
+		BigInteger _s = _m.modPow(d, n);
+
+		return _s.toByteArray();
+	}
+
+	/**
+	 * Снять закрывающий множитель closingMultiplier
+	 *
+	 * Порядок использования функций: genClosingMultiplier, blind, blindSign, unblind. Дальше уже unsign
+	 * 
+	 * @param msg - исходное сообщение, которое изначально вслепую подписывалось
+	 * @param signedBlindMsg - подписанное скрытое сообщение из функции blindSign
+	 * @param closingMultiplier - закрывающий множитель
+	 * @param pubKey - публичный ключ того, кто подписывал
+	 * @return подписанное сообщение msg. Дальше можно проверить подпись с помощью функции unsign
+	 */
+	public static byte[] unblind(byte[] msg, byte[] signedBlindMsg, byte[] closingMultiplier, byte[] pubKey)
+	{
+		BigInteger _s = new BigInteger(signedBlindMsg);
+
+		BigInteger r = new BigInteger(closingMultiplier);
+
+		BigInteger n = new BigInteger(ByteWorker.Array2Arrays(pubKey)[1]);
+
+		BigInteger r_inverse = Tools.findInverseMultiplicative(r, n);
+
+		BigInteger h = _s.multiply(r_inverse).mod(n);
+
+		byte[][] buffB = new byte[2][];
+		buffB[0] = h.toByteArray();
+		buffB[1] = msg;
+
+		return ByteWorker.Arrays2Array(buffB);
+	}
+
+	public static byte[] encrypt(byte[] msg, byte[] pubKey)
+	{
+		RSA4096 rsa = new RSA4096();
+
+		rsa.setKeys(pubKey, null);
+
+		return rsa.encrypt(msg);
+	}
+
+	public static byte[] decrypt(byte[] msg, byte[] privKey)
+	{
+		RSA4096 rsa = new RSA4096();
+
+		rsa.setKeys(null, privKey);
+
+		return rsa.decrypt(msg);
 	}
 
 	/**
@@ -285,9 +411,7 @@ public class RSA4096 implements IAsymCipher
 		BigInteger e = new BigInteger(buffB[0]);
 		BigInteger n = new BigInteger(buffB[1]);
 
-		//byte[] h = _sign.modPow(e, n);
 		byte[] h = ByteWorker.NumToBytes(_sign.modPow(e, n));
-
 
 		if(Arrays.equals(h, hashMsg) == true)
 			return msg;

@@ -134,3 +134,57 @@ public class test
 	}
 }
 ```
+
+Для подписи на примере класса RSA4096:
+
+``` java
+import java.lang.*;
+import java.util.*;
+import CipherLib.*;
+
+public class test
+{
+	public static void main(String[] args)
+	{
+		//Создаются ключ того, кто подписывает
+		IAsymCipher rsa = new RSA4096();
+		rsa.genKeys();
+		byte[] pubKey = rsa.getPubKey();
+		byte[] privKey = rsa.getPrivKey();
+
+		//=====Обычная цифровая подпись=====
+		System.out.println("Digital signature:");
+
+		String msg = "It message is signed.";
+		byte[] srcMsg = msg.getBytes();
+		
+		//Подписываем
+		byte[] signedMsg = RSA4096.sign(srcMsg, privKey);
+		
+		//Проверяем подпись
+		byte[] unsignedMsg = RSA4096.unsign(signedMsg, pubKey);
+		System.out.println(new String(unsignedMsg));
+
+		//Если хотябы 1 бит будет другой, то вернёт null
+		signedMsg[9]++;
+		unsignedMsg = RSA4096.unsign(signedMsg, pubKey);
+		System.out.println("The message is changed, so it is \"" + unsignedMsg + "\".");
+
+		//=====Слепая цифровая подпись=====
+		System.out.println("\nBlind signature:");
+
+		msg = "It is not known what is being signed.";
+		srcMsg = msg.getBytes();
+		
+		//Подписываем то, не знаем что
+		byte[] r = RSA4096.genClosingMultiplier(pubKey);
+		byte[] hiddenMsg = RSA4096.blind(srcMsg, r, pubKey);
+		byte[] signedHiddenMsg = RSA4096.blindSign(hiddenMsg, privKey);
+		signedMsg = RSA4096.unblind(srcMsg, signedHiddenMsg, r, pubKey);
+		
+		//Проверим подпись
+		unsignedMsg = RSA4096.unsign(signedMsg, pubKey);
+		System.out.println(new String(unsignedMsg));
+	}
+}
+```

@@ -17,7 +17,7 @@ import java.io.*;
 /**
  * Класс, позволяющий удобн?о работать с массивом байт. Ни один из методов не "портит" аргументы
  * 
- * @version 0.2
+ * @version 0.3
  */
 public class ByteWorker
 {
@@ -904,4 +904,92 @@ public class ByteWorker
             res[i] = ByteWorker.signedByte( in.read() );
         return res;
     }
+
+    /**
+     * Проверяет массивы байт на эквивалентность
+     *
+     * Например:
+     *
+     * a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], byN = 4, тогда:
+     *
+     * return[0] = [1, 2, 3, 4], return[1] = [5, 6, 7, 8], return[2] = [9, 10, 11]
+     * 
+     * @param a - первый массив байт
+     * @param b - второй массив байт
+     * @return их эквивалентность
+     */
+    public static boolean equalsByteArrays(byte[] a, byte[] b)
+    {
+        return Arrays.equals(a, b);
+    }
+
+    /**
+     * "Режет" массив на кусочки.
+     *
+     * Например:
+     *
+     * a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], byN = 4, тогда:
+     *
+     * return[0] = [1, 2, 3, 4], return[1] = [5, 6, 7, 8], return[2] = [9, 10, 11]
+     * 
+     * @param a - массив, который режется
+     * @param byN - максимальная длина кусочка
+     * @return двойной массив байт с кусочками
+     */
+     public static byte[][] cutArray(byte[] a, int byN)
+     {
+        if (a.length == 0 || byN == 0)
+            throw new IllegalArgumentException("a.length = " + a.length + ", byN = " + byN);
+        int pieces = a.length/byN + 1;
+        if(a.length % byN == 0)
+            --pieces;
+        byte[][] res  = new byte[pieces][];
+        int gi, ai, i;
+        gi = 0;
+        res[0] = new byte[(a.length-gi) < byN?a.length-gi:byN];
+        for(i = 0, gi = 0, ai = 0; gi < a.length; ++gi, ++i)
+        {
+            if(i >= byN)
+            {
+                ++ai;
+                i = 0;
+                res[ai] = new byte[(a.length-gi) < byN?a.length-gi:byN];
+            }
+            res[ai][i] = a[gi];
+        }
+
+        return res;
+     }
+
+    /**
+     * "Собирает" порезанный массив на кусочки.
+     *
+     * Например:
+     *
+     * a[0] = [1, 2, 3, 4], a[1] = [5, 6, 7, 8], a[2] = [9, 10, 11], тогда:
+     *
+     * return = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+     * 
+     * @param a - разрезанный массив
+     * @return склеенный массив
+     */
+     public static byte[] glueCutedArray(byte[][] a)
+     {
+        int i, gi, n, ai;
+        n = 0;
+        for(i = 0; i < a.length; ++i)
+            n += a[i].length;
+        byte[] res = new byte[n];
+        gi = 0;
+        for(gi = 0, ai = 0, i = 0; gi < n; ++gi, ++i)
+        {
+            if(i >= a[ai].length)
+            {
+                ++ai;
+                i = 0;
+            }
+            res[gi] = a[ai][i];
+        }
+        return res;
+     }
 }
