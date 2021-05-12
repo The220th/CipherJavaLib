@@ -48,6 +48,7 @@ A small library for Java that will help you encrypt
 ## Пример использования
 
 Для симметричного шифрования на примере класса AES256:
+
 ``` java
 import java.lang.*;
 import java.util.*;
@@ -122,7 +123,7 @@ public class test
 
 		//Ассиметричное шифрование сильно медленнее, чем симметричное.
 		//Поэтому лучше RSA использовать для того, чтобы обменяться ключами для AES-256 и далее шифровать симметричным шифрованием.
-		String s1 = "Bob to Alice: It is AES256 key";
+		String s1 = "Bob to Alice: It is AES256 key"; //Сообщение может быть любой длины. Сколько хватит RAM.
 		byte[] encryptedMsg1 = rsaBob.encrypt(s1.getBytes());
 		byte[] decryptedMsg1 = rsaAlice.decrypt(encryptedMsg1);
 		System.out.println(new String(decryptedMsg1));
